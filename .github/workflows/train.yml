@@ -1,0 +1,68 @@
+name: Train Model (pretrain / finetune)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Mode training'
+        required: true
+        type: choice
+        default: pretrain
+        options:
+          - pretrain
+          - finetune
+      batch_size:    { description: 'Batch size',                   required: true, default: '8' }
+      steps:         { description: 'Total training steps',         required: true, default: '1000' }
+      vocab_size:    { description: 'Max vocab size',               required: true, default: '2048' }
+      embed_dim:     { description: 'd_model',                      required: true, default: '256' }
+      num_heads:     { description: 'Attention heads',              required: true, default: '4' }
+      num_layers:    { description: 'Transformer layers',           required: true, default: '4' }
+      seq_len:       { description: 'Sequence length',              required: true, default: '256' }
+      learning_rate: { description: 'Learning rate',                required: true, default: '0.0003' }
+      warmup_steps:  { description: 'LR warmup steps',              required: true, default: '100' }
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install deps (CPU torch)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Download & extract (nested-zip aware)
+        run: python scripts/download.py ${{ inputs.mode }}
+
+      - name: Parse jsonl + build vocab
+        env:
+          VOCAB_SIZE: ${{ inputs.vocab_size }}
+          SEQ_LEN:    ${{ inputs.seq_len }}
+        run: python scripts/prepare_data.py
+
+      - name: Train
+        env:
+          MODE:           ${{ inputs.mode }}
+          BATCH_SIZE:     ${{ inputs.batch_size }}
+          STEPS:          ${{ inputs.steps }}
+          EMBED_DIM:      ${{ inputs.embed_dim }}
+          NUM_HEADS:      ${{ inputs.num_heads }}
+          NUM_LAYERS:     ${{ inputs.num_layers }}
+          SEQ_LEN:        ${{ inputs.seq_len }}
+          LEARNING_RATE:  ${{ inputs.learning_rate }}
+          WARMUP_STEPS:   ${{ inputs.warmup_steps }}
+        run: python scripts/train.py
+
+      - name: Upload model (.bin)
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ inputs.mode }}-${{ github.run_number }}
+          path: output/
+          if-no-files-found: error 
