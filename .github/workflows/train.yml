@@ -40,7 +40,14 @@ jobs:
       - name: Download & extract (nested-zip aware)
         run: python scripts/download.py ${{ inputs.mode }}
 
+      # 👇 Tambahkan swap 4GB sebelum step yang rawan OOM
+      - name: Increase swap space (4GB)
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 4
+
       - name: Parse jsonl + build vocab
+        timeout-minutes: 60
         env:
           VOCAB_SIZE: ${{ inputs.vocab_size }}
           SEQ_LEN:    ${{ inputs.seq_len }}
@@ -64,4 +71,4 @@ jobs:
         with:
           name: model-${{ inputs.mode }}-${{ github.run_number }}
           path: output/
-          if-no-files-found: error 
+          if-no-files-found: error
